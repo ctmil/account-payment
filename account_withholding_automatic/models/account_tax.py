@@ -321,6 +321,7 @@ result = withholdable_base_amount * 0.10
                 'payment': payment_group,
                 'partner': payment_group.commercial_partner_id,
                 'withholding_tax': self,
+                'result': 0,
             }
             eval(
                 self.withholding_python_compute, localdict,
