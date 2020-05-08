@@ -21,20 +21,6 @@ class AccountPayment(models.Model):
         states={'draft': [('readonly', False)]},
         auto_join=True,
     )
-    # only for v8 comatibility where more than one check could be received
-    # or issued
-    check_ids_copy = fields.Many2many(
-        related='check_ids',
-        readonly=True,
-    )
-    readonly_currency_id = fields.Many2one(
-        related='currency_id',
-        readonly=True,
-    )
-    readonly_amount = fields.Monetary(
-        related='amount',
-        readonly=True,
-    )
     # we add this field for better usability on issue checks and received
     # checks. We keep m2m field for backward compatibility where we allow to
     # use more than one check per payment
@@ -99,7 +85,6 @@ class AccountPayment(models.Model):
     )
     check_subtype = fields.Selection(
         related='checkbook_id.issue_check_subtype',
-        readonly=True,
     )
     check_bank_id = fields.Many2one(
         'res.bank',
@@ -451,6 +436,11 @@ class AccountPayment(models.Model):
                 return None
 
             _logger.info('Deliver Check')
+            # we add payment_date so that it can be understood ok on cash flow. Ideally it should
+            # be reconciled. We only set payment date if one check, if more thatn one check we should
+            # splt lines as in transfers
+            if len(rec.check_ids) == 1 and rec.check_ids.payment_date:
+                vals['date_maturity'] = rec.check_ids.payment_date
             rec.check_ids._add_operation(
                 'delivered', rec, rec.partner_id, date=rec.payment_date)
             vals['account_id'] = rec.check_ids.get_third_check_account().id
@@ -598,6 +588,11 @@ class AccountPayment(models.Model):
     def _get_counterpart_move_line_vals(self, invoice=False):
         vals = super(AccountPayment, self)._get_counterpart_move_line_vals(
             invoice=invoice)
+
+        # use check payment date on debt entry also so that it can be used for NC/ND adjustaments
+        if self.check_type and self.check_payment_date:
+            vals['date_maturity'] = self.check_payment_date
+
         force_account_id = self._context.get('force_account_id')
         if force_account_id:
             vals['account_id'] = force_account_id
@@ -632,6 +627,7 @@ class AccountPayment(models.Model):
         aml.write({
             'name': new_name % checks[0].name,
             amount_field: checks[0].amount_company_currency,
+            'date_maturity': checks[0].payment_date,
             'amount_currency': currency and currency_sign * checks[0].amount,
         })
         res |= aml
@@ -640,6 +636,7 @@ class AccountPayment(models.Model):
             res |= aml.copy({
                 'name': new_name % check.name,
                 amount_field: check.amount_company_currency,
+                'date_maturity': check.payment_date,
                 'payment_id': self.id,
                 'amount_currency': currency and currency_sign * check.amount,
             })

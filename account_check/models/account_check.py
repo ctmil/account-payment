@@ -11,6 +11,7 @@ _logger = logging.getLogger(__name__)
 class AccountCheckOperation(models.Model):
 
     _name = 'account.check.operation'
+    _description = 'account.check.operation'
     _rec_name = 'operation'
     _order = 'date desc, id desc'
     # _order = 'create_date desc'
@@ -158,7 +159,6 @@ class AccountCheck(models.Model):
     )
     issue_check_subtype = fields.Selection(
         related='checkbook_id.issue_check_subtype',
-        readonly=True,
     )
     type = fields.Selection(
         [('issue_check', 'Issue Check'), ('third_check', 'Third Check')],
@@ -167,10 +167,9 @@ class AccountCheck(models.Model):
     )
     partner_id = fields.Many2one(
         related='operation_ids.partner_id',
-        readonly=True,
         store=True,
         index=True,
-	string='Last operation partner',
+        string='Last operation partner',
     )
     first_partner_id = fields.Many2one(
         'res.partner',
@@ -257,12 +256,11 @@ class AccountCheck(models.Model):
     )
     company_id = fields.Many2one(
         related='journal_id.company_id',
-        readonly=True,
         store=True,
     )
     company_currency_id = fields.Many2one(
         related='company_id.currency_id',
-        readonly=True,
+        string='Company currency',
     )
 
     @api.depends('operation_ids.partner_id')
@@ -427,16 +425,16 @@ class AccountCheck(models.Model):
         operation_from_state_map = {
             # 'draft': [False],
             'holding': [
-                'draft', 'deposited', 'selled', 'delivered', 'transfered','rejected'],
+                'draft', 'deposited', 'selled', 'delivered', 'transfered'],
             'delivered': ['holding'],
-            'deposited': ['deposited','holding', 'rejected'],
-            'selled': ['holding','selled'],
+            'deposited': ['holding', 'rejected'],
+            'selled': ['holding'],
             'handed': ['draft'],
             'transfered': ['holding'],
             'withdrawed': ['draft'],
-            'rejected': ['delivered', 'deposited', 'selled', 'handed','holding'],
+            'rejected': ['delivered', 'deposited', 'selled', 'handed'],
             'debited': ['handed'],
-            'returned': ['handed', 'holding','deposited','selled'],
+            'returned': ['handed', 'holding'],
             'changed': ['handed', 'holding'],
             'cancel': ['draft'],
             'reclaimed': ['rejected'],
@@ -464,26 +462,6 @@ class AccountCheck(models.Model):
         return super(AccountCheck, self).unlink()
 
 # checks operations from checks
-
-    @api.multi
-    def bank_return(self):
-        self.ensure_one()
-        if self.state in ['deposited','selled'] and self.type == 'third_check':
-            journal_id = None
-            for oper in self.operation_ids:
-                if oper.operation in ['deposited','selled']:
-                     journal_id = oper.origin.journal_id
-            vals = self.get_bank_vals('bank_return', journal_id)
-            date = self._context.get('action_date')
-            if not date:
-                     vals['date'] = action_date or fields.Date.today()
-            else:
-                     vals['date'] = str(date)
-            move = self.env['account.move'].create(vals)
-            move.post()
-            self._add_operation('returned', move, date=vals['date'])
-            self.write({'state': 'holding'})
-
 
     @api.multi
     def bank_debit(self):
@@ -669,6 +647,9 @@ class AccountCheck(models.Model):
                     'company currency, you must provide "Amount" and "Amount '
                     'Company Currency"'))
             elif not rec.amount:
+                if not rec.amount_company_currency:
+                    raise ValidationError(_(
+                        'No puede crear un cheque sin importe'))
                 rec.amount = rec.amount_company_currency
             elif not rec.amount_company_currency:
                 rec.amount_company_currency = rec.amount
@@ -678,10 +659,10 @@ class AccountCheck(models.Model):
         self.ensure_one()
         if self.state in ['deposited', 'selled']:
             operation = self._get_operation(self.state)
-            if operation.origin and operation.origin._name == 'account.payment':
+            if operation.origin._name == 'account.payment':
                 journal = operation.origin.destination_journal_id
             # for compatibility with migration from v8
-            elif operation.origin and operation.origin._name == 'account.move':
+            elif operation.origin._name == 'account.move':
                 journal = operation.origin.journal_id
             else:
                 raise ValidationError(_(
@@ -693,12 +674,8 @@ class AccountCheck(models.Model):
                 force_account_id=self.company_id._get_check_account(
                     'rejected').id,
             ).create(payment_vals)
-
             self.post_payment_check(payment)
             self._add_operation('rejected', payment, date=payment.payment_date)
-            return self.action_create_debit_note(
-                'rejected', 'customer', operation.partner_id,
-                self.company_id._get_check_account('deferred'))
         elif self.state == 'delivered':
             operation = self._get_operation(self.state, True)
             return self.action_create_debit_note(
@@ -728,7 +705,6 @@ class AccountCheck(models.Model):
         journal = self.env['account.journal'].search([
             ('company_id', '=', self.company_id.id),
             ('type', '=', journal_type),
-            ('use_documents', '=', True),
         ], limit=1)
 
         # si pedimos rejected o reclamo, devolvemos mensaje de rechazo y cuenta
@@ -747,14 +723,9 @@ class AccountCheck(models.Model):
             # 'product_id': self.product_id.id,
             'name': name,
             'account_id': account.id,
-            'price_unit': 0,
+            'price_unit': self.amount,
             # 'invoice_id': invoice.id,
         }
-
-
-        for oper in self.operation_ids:
-            if oper.partner_id:
-                partner = oper.partner_id
 
         inv_vals = {
             # this is the reference that goes on account.move.line of debt line

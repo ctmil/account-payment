@@ -2,7 +2,7 @@ from odoo import models, fields, api, _
 import odoo.addons.decimal_precision as dp
 from odoo.exceptions import UserError, ValidationError
 from ast import literal_eval
-from odoo.tools.safe_eval import safe_eval as eval
+from odoo.tools.safe_eval import safe_eval
 from dateutil.relativedelta import relativedelta
 import datetime
 
@@ -70,7 +70,7 @@ class AccountTax(models.Model):
         help="The computation method for the tax amount."
     )
     withholding_python_compute = fields.Text(
-        'Python Code',
+        'Python Code (withholdings)',
         default='''
 # withholdable_base_amount
 # payment: account.payment.group object

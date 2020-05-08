@@ -53,7 +53,6 @@ class AccountPaymentGroup(models.Model):
     )
     commercial_partner_id = fields.Many2one(
         related='partner_id.commercial_partner_id',
-        readonly=True,
     )
     currency_id = fields.Many2one(
         'res.currency',
@@ -135,7 +134,6 @@ class AccountPaymentGroup(models.Model):
         # ('sent', 'Sent'),
         # ('reconciled', 'Reconciled')
         ('cancel', 'Cancelled'),
-        ('cancelled', 'Cancelledx'),
     ],
         readonly=True,
         default='draft',
@@ -162,7 +160,7 @@ class AccountPaymentGroup(models.Model):
         # no podemos ordenar por due date porque esta hardecodeado en
         # funcion _get_pair_to_reconcile
         help="Payment will be automatically matched with the oldest lines of "
-        "this list (by date, no by maturity date). You can remove any line you"
+        "this list (by maturity date). You can remove any line you"
         " dont want to be matched.",
         domain=move_lines_domain,
         readonly=True,
@@ -573,6 +571,7 @@ class AccountPaymentGroup(models.Model):
             rec.payment_ids.cancel()
             rec.payment_ids.write({'invoice_ids': [(5, 0, 0)]})
         self.write({'state': 'cancel'})
+        return True
 
     @api.multi
     def action_draft(self):
@@ -607,8 +606,8 @@ class AccountPaymentGroup(models.Model):
         create_from_statement = self._context.get(
             'create_from_statement', False)
         create_from_expense = self._context.get('create_from_expense', False)
-        self = self.with_context({})
         for rec in self:
+            rec = rec.with_context({'company_id': rec.company_id.id})
             # TODO if we want to allow writeoff then we can disable this
             # constrain and send writeoff_journal_id and writeoff_acc_id
             if not rec.payment_ids:
@@ -629,7 +628,7 @@ class AccountPaymentGroup(models.Model):
             # al crear desde website odoo crea primero el pago y lo postea
             # y no debemos re-postearlo
             if not create_from_website and not create_from_expense:
-                rec.payment_ids.filtered(lambda x: x.state == 'draft').post()
+                rec.payment_ids.sorted(key=lambda l: l.signed_amount).filtered(lambda x: x.state == 'draft').post()
 
             counterpart_aml = rec.payment_ids.mapped('move_line_ids').filtered(
                 lambda r: not r.reconciled and r.account_id.internal_type in (

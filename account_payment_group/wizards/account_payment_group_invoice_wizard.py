@@ -7,6 +7,7 @@ from openerp.exceptions import ValidationError
 
 class AccountPaymentGroupInvoiceWizard(models.TransientModel):
     _name = "account.payment.group.invoice.wizard"
+    _description = "account.payment.group.invoice.wizard"
 
     @api.model
     def default_payment_group(self):
@@ -32,7 +33,6 @@ class AccountPaymentGroupInvoiceWizard(models.TransientModel):
     )
     currency_id = fields.Many2one(
         related='payment_group_id.currency_id',
-        readonly=True,
     )
     date = fields.Date(
         string='Accounting Date'
@@ -64,7 +64,6 @@ class AccountPaymentGroupInvoiceWizard(models.TransientModel):
     )
     company_id = fields.Many2one(
         related='payment_group_id.company_id',
-        readonly=True,
     )
     account_analytic_id = fields.Many2one(
         'account.analytic.account',

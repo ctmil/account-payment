@@ -4,15 +4,8 @@ import logging
 _logger = logging.getLogger(__name__)
 
 
-class AccountPaymentMethod(models.Model):
-    _inherit = "account.payment.method"
-
-    name = fields.Char(translate=True)
-
-
 class AccountPayment(models.Model):
-    _name = "account.payment"
-    _inherit = ['mail.thread', 'account.payment']
+    _inherit = "account.payment"
 
     state = fields.Selection(track_visibility='always')
     amount = fields.Monetary(track_visibility='always')
@@ -36,7 +29,8 @@ class AccountPayment(models.Model):
     # nuevo campo funcion para definir dominio de los metodos
     payment_method_ids = fields.Many2many(
         'account.payment.method',
-        compute='_compute_payment_methods'
+        compute='_compute_payment_methods',
+        string='Available payment methods',
     )
     journal_ids = fields.Many2many(
         'account.journal',
@@ -118,6 +112,14 @@ class AccountPayment(models.Model):
                 methods = rec.journal_id.inbound_payment_method_ids
             rec.payment_method_ids = methods
 
+    @api.onchange('currency_id')
+    def _onchange_currency(self):
+        """ Anulamos metodo nativo que pisa el monto remanente que pasamos
+        por contexto TODO ver si podemos re-incorporar esto y hasta extender
+        _compute_payment_amount para que el monto se calcule bien aun usando
+        el save and new"""
+        return False
+
     @api.onchange('payment_type')
     def _onchange_payment_type(self):
         """
@@ -151,7 +153,7 @@ class AccountPayment(models.Model):
         Agregasmos dominio en vista ya que se pierde si se vuelve a entrar
         Anulamos funcion original porque no haria falta
         """
-        return True
+        return False
 
     def _onchange_amount(self):
         """
