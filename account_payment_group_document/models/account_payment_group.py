@@ -204,9 +204,10 @@ class AccountPaymentGroup(models.Model):
         for rec in self:
             if (rec.receiptbook_id and
                     rec.receiptbook_id.company_id != rec.company_id):
-                raise ValidationError(_(
-                    'The company of the receiptbook and of the '
-                    'payment must be the same!'))
+                rec.company_id = rec.receiptbook_id.company_id
+                #raise ValidationError(_(
+                #    'The company of the receiptbook and of the '
+                #    'payment must be the same!'))
 
     @api.multi
     @api.constrains('receiptbook_id', 'document_number')
