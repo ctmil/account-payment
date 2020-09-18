@@ -11,6 +11,7 @@ _logger = logging.getLogger(__name__)
 class AccountCheckOperation(models.Model):
 
     _name = 'account.check.operation'
+    _description = 'account.check.operation'
     _rec_name = 'operation'
     _order = 'date desc, id desc'
     # _order = 'create_date desc'
